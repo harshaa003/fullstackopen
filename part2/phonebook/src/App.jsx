@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import axios from 'axios'
+
+const baseUrl = 'http://localhost:3001/api/persons'
 
 const Filter = ({ filter, handleFilterChange }) => {
   return (
     <div>
-      filter shown with{' '}
+      filter shown{' '}
       <input value={filter} onChange={handleFilterChange} />
     </div>
   )
@@ -35,37 +38,51 @@ const PersonForm = ({
   )
 }
 
-const Person = ({ person }) => {
+const Person = ({ person, deletePerson }) => {
   return (
     <p>
-      {person.name} {person.number}
+      {person.name} {person.number}{' '}
+      <button onClick={() => deletePerson(person.id)}>
+        delete
+      </button>
     </p>
   )
 }
 
-const Persons = ({ personsToShow }) => {
+const Persons = ({ personsToShow, deletePerson }) => {
   return (
     <div>
-      {personsToShow.map(person =>
-        <Person key={person.name} person={person} />
-      )}
+      {personsToShow.map(person => (
+        <Person
+          key={person.id}
+          person={person}
+          deletePerson={deletePerson}
+        />
+      ))}
     </div>
   )
 }
 
 const App = () => {
-  const [persons, setPersons] = useState([
-    { name: 'Arto Hellas', number: '040-123456' },
-    { name: 'Ada Lovelace', number: '39-44-5323523' },
-    { name: 'Dan Abramov', number: '12-43-234345' },
-    { name: 'Mary Poppendieck', number: '39-23-6423122' }
-  ])
-
+  const [persons, setPersons] = useState([])
   const [newName, setNewName] = useState('')
   const [newNumber, setNewNumber] = useState('')
   const [filter, setFilter] = useState('')
 
-  const addPerson = (event) => {
+  // Get persons from backend
+  useEffect(() => {
+    axios
+      .get(baseUrl)
+      .then(response => {
+        setPersons(response.data)
+      })
+      .catch(error => {
+        console.log(error)
+      })
+  }, [])
+
+  // Add person
+  const addPerson = event => {
     event.preventDefault()
 
     const nameExists = persons.some(
@@ -82,20 +99,48 @@ const App = () => {
       number: newNumber
     }
 
-    setPersons(persons.concat(personObject))
-    setNewName('')
-    setNewNumber('')
+    axios
+      .post(baseUrl, personObject)
+      .then(response => {
+        setPersons(persons.concat(response.data))
+        setNewName('')
+        setNewNumber('')
+      })
+      .catch(error => {
+        console.log(error)
+        alert(error.response?.data?.error || 'Something went wrong')
+      })
   }
 
-  const handleNameChange = (event) => {
+  // Delete person
+  const deletePerson = id => {
+    const person = persons.find(person => person.id === id)
+
+    if (!person) {
+      return
+    }
+
+    if (window.confirm(`Delete ${person.name}?`)) {
+      axios
+        .delete(`${baseUrl}/${id}`)
+        .then(() => {
+          setPersons(persons.filter(person => person.id !== id))
+        })
+        .catch(error => {
+          console.log(error)
+        })
+    }
+  }
+
+  const handleNameChange = event => {
     setNewName(event.target.value)
   }
 
-  const handleNumberChange = (event) => {
+  const handleNumberChange = event => {
     setNewNumber(event.target.value)
   }
 
-  const handleFilterChange = (event) => {
+  const handleFilterChange = event => {
     setFilter(event.target.value)
   }
 
@@ -124,7 +169,10 @@ const App = () => {
 
       <h3>Numbers</h3>
 
-      <Persons personsToShow={personsToShow} />
+      <Persons
+        personsToShow={personsToShow}
+        deletePerson={deletePerson}
+      />
     </div>
   )
 }
