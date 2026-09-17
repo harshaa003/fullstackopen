@@ -141,6 +141,7 @@ app.use(express.static(path.join(__dirname, 'dist')))
 app.get('/{*splat}', (request, response) => {
   response.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
+
 const PORT = process.env.PORT || 3001
 
 app.listen(PORT, () => {
