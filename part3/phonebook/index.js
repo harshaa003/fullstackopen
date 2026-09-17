@@ -1,8 +1,40 @@
 const express = require('express')
+const morgan = require('morgan')
 
 const app = express()
 
 app.use(express.json())
+
+// 3.8 - Custom Morgan token for POST data
+morgan.token('body', (request) => {
+  return JSON.stringify(request.body)
+})
+
+// 3.7 + 3.8 - Morgan logging
+app.use(morgan((tokens, request, response) => {
+  if (request.method === 'POST') {
+    return [
+      tokens.method(request, response),
+      tokens.url(request, response),
+      tokens.status(request, response),
+      tokens.res(request, response, 'content-length'),
+      '-',
+      tokens['response-time'](request, response),
+      'ms',
+      JSON.stringify(request.body)
+    ].join(' ')
+  }
+
+  return [
+    tokens.method(request, response),
+    tokens.url(request, response),
+    tokens.status(request, response),
+    tokens.res(request, response, 'content-length'),
+    '-',
+    tokens['response-time'](request, response),
+    'ms'
+  ].join(' ')
+}))
 
 const persons = [
   {
@@ -27,12 +59,12 @@ const persons = [
   }
 ]
 
-// 3.1 - Get all persons
+// 3.1
 app.get('/api/persons', (request, response) => {
   response.json(persons)
 })
 
-// 3.2 - Information
+// 3.2
 app.get('/info', (request, response) => {
   const currentTime = new Date()
 
@@ -42,7 +74,7 @@ app.get('/info', (request, response) => {
   `)
 })
 
-// 3.3 - Get one person
+// 3.3
 app.get('/api/persons/:id', (request, response) => {
   const id = request.params.id
   const person = persons.find(person => person.id === id)
@@ -54,7 +86,7 @@ app.get('/api/persons/:id', (request, response) => {
   }
 })
 
-// 3.4 - Delete a person
+// 3.4
 app.delete('/api/persons/:id', (request, response) => {
   const id = request.params.id
 
@@ -69,7 +101,7 @@ app.delete('/api/persons/:id', (request, response) => {
   response.status(204).end()
 })
 
-// 3.5 + 3.6 - Add a person with validation
+// 3.5 + 3.6
 app.post('/api/persons', (request, response) => {
   const body = request.body
 
