@@ -1,4 +1,4 @@
-name: Anecdotes tests
+name: Anecdotes tests check
 
 on:
   push:
@@ -31,3 +31,7 @@ jobs:
       - name: Run Anecdotes tests
         working-directory: part6/unicafe-tests/anecdotes-tests
         run: npm test
+
+      - name: Verify tests are real
+        working-directory: part6/unicafe-tests/anecdotes-tests
+        run: npm run verify:tests-are-real
