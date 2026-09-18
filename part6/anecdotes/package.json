@@ -1,0 +1,26 @@
+{
+  "name": "anecdotes",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "server": "json-server -p 3001 --watch db.json"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "json-server": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest"
+  }
+}
