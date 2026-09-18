@@ -1,5 +1,7 @@
 const blogsRouter = require('express').Router()
+
 const Blog = require('../models/blog')
+
 const middleware = require('../utils/middleware')
 
 blogsRouter.get('/', async (request, response) => {
@@ -21,9 +23,15 @@ blogsRouter.post('/', middleware.userExtractor, async (request, response) => {
   const savedBlog = await blog.save()
 
   user.blogs = user.blogs.concat(savedBlog._id)
+
   await user.save()
 
-  response.status(201).json(savedBlog)
+  const populatedBlog = await savedBlog.populate('user', {
+    username: 1,
+    name: 1
+  })
+
+  response.status(201).json(populatedBlog)
 })
 
 blogsRouter.delete('/:id', middleware.userExtractor, async (request, response) => {
@@ -57,11 +65,28 @@ blogsRouter.delete('/:id', middleware.userExtractor, async (request, response) =
 blogsRouter.put('/:id', async (request, response) => {
   const blog = request.body
 
+  const existingBlog = await Blog.findById(request.params.id)
+
+  if (!existingBlog) {
+    return response.status(404).json({
+      error: 'blog not found'
+    })
+  }
+
   const updatedBlog = await Blog.findByIdAndUpdate(
     request.params.id,
-    blog,
-    { new: true, runValidators: true }
-  )
+    {
+      ...blog,
+      user: blog.user || existingBlog.user
+    },
+    {
+      new: true,
+      runValidators: true
+    }
+  ).populate('user', {
+    username: 1,
+    name: 1
+  })
 
   response.json(updatedBlog)
 })
