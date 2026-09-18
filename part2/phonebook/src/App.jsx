@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import personService from './services/persons'
 
-const baseUrl = '/api/persons'
+const Notification = ({ message, error }) => {
+  if (!message) {
+    return null
+  }
 
-const Filter = ({ filter, handleFilterChange }) => {
   return (
-    <div>
-      filter shown{' '}
-      <input value={filter} onChange={handleFilterChange} />
+    <div className={error ? 'error' : 'notification'}>
+      {message}
     </div>
   )
 }
@@ -15,20 +16,26 @@ const Filter = ({ filter, handleFilterChange }) => {
 const PersonForm = ({
   addPerson,
   newName,
-  handleNameChange,
   newNumber,
+  handleNameChange,
   handleNumberChange
 }) => {
   return (
     <form onSubmit={addPerson}>
       <div>
-        name:{' '}
-        <input value={newName} onChange={handleNameChange} />
+        name:
+        <input
+          value={newName}
+          onChange={handleNameChange}
+        />
       </div>
 
       <div>
-        number:{' '}
-        <input value={newNumber} onChange={handleNumberChange} />
+        number:
+        <input
+          value={newNumber}
+          onChange={handleNumberChange}
+        />
       </div>
 
       <div>
@@ -38,26 +45,16 @@ const PersonForm = ({
   )
 }
 
-const Person = ({ person, deletePerson }) => {
-  return (
-    <p>
-      {person.name} {person.number}{' '}
-      <button onClick={() => deletePerson(person.id)}>
-        delete
-      </button>
-    </p>
-  )
-}
-
-const Persons = ({ personsToShow, deletePerson }) => {
+const Persons = ({ persons, deletePerson }) => {
   return (
     <div>
-      {personsToShow.map(person => (
-        <Person
-          key={person.id}
-          person={person}
-          deletePerson={deletePerson}
-        />
+      {persons.map(person => (
+        <p key={person.id}>
+          {person.name} {person.number}{' '}
+          <button onClick={() => deletePerson(person.id, person.name)}>
+            delete
+          </button>
+        </p>
       ))}
     </div>
   )
@@ -68,68 +65,126 @@ const App = () => {
   const [newName, setNewName] = useState('')
   const [newNumber, setNewNumber] = useState('')
   const [filter, setFilter] = useState('')
+  const [message, setMessage] = useState(null)
+  const [error, setError] = useState(false)
 
-  // Get persons from backend
   useEffect(() => {
-    axios
-      .get(baseUrl)
-      .then(response => {
-        setPersons(response.data)
+    personService
+      .getAll()
+      .then(initialPersons => {
+        setPersons(initialPersons)
       })
       .catch(error => {
-        console.log(error)
+        showMessage(
+          error.response?.data?.error || 'Failed to load phonebook',
+          true
+        )
       })
   }, [])
 
-  // Add person
+  const showMessage = (text, isError = false) => {
+    setMessage(text)
+    setError(isError)
+
+    setTimeout(() => {
+      setMessage(null)
+      setError(false)
+    }, 5000)
+  }
+
   const addPerson = event => {
     event.preventDefault()
 
-    const nameExists = persons.some(
-      person => person.name === newName
+    const existingPerson = persons.find(
+      person => person.name.toLowerCase() === newName.toLowerCase()
     )
 
-    if (nameExists) {
-      alert(`${newName} is already added to phonebook`)
+    if (existingPerson) {
+      const confirmUpdate = window.confirm(
+        `${newName} is already added to phonebook, replace the old number with the new one?`
+      )
+
+      if (!confirmUpdate) {
+        return
+      }
+
+      const updatedPerson = {
+        ...existingPerson,
+        number: newNumber
+      }
+
+      personService
+        .update(existingPerson.id, updatedPerson)
+        .then(returnedPerson => {
+          setPersons(
+            persons.map(person =>
+              person.id !== existingPerson.id
+                ? person
+                : returnedPerson
+            )
+          )
+
+          setNewName('')
+          setNewNumber('')
+
+          showMessage(`Updated ${returnedPerson.name}`)
+        })
+        .catch(error => {
+          showMessage(
+            error.response?.data?.error || 'Update failed',
+            true
+          )
+        })
+
       return
     }
 
-    const personObject = {
+    const newPerson = {
       name: newName,
       number: newNumber
     }
 
-    axios
-      .post(baseUrl, personObject)
-      .then(response => {
-        setPersons(persons.concat(response.data))
+    personService
+      .create(newPerson)
+      .then(createdPerson => {
+        setPersons(persons.concat(createdPerson))
         setNewName('')
         setNewNumber('')
+
+        showMessage(`Added ${createdPerson.name}`)
       })
       .catch(error => {
-        console.log(error)
-        alert(error.response?.data?.error || 'Something went wrong')
+        showMessage(
+          error.response?.data?.error || 'Validation failed',
+          true
+        )
       })
   }
 
-  // Delete person
-  const deletePerson = id => {
-    const person = persons.find(person => person.id === id)
+  const deletePerson = (id, name) => {
+    const confirmDelete = window.confirm(
+      `Delete ${name}?`
+    )
 
-    if (!person) {
+    if (!confirmDelete) {
       return
     }
 
-    if (window.confirm(`Delete ${person.name}?`)) {
-      axios
-        .delete(`${baseUrl}/${id}`)
-        .then(() => {
-          setPersons(persons.filter(person => person.id !== id))
-        })
-        .catch(error => {
-          console.log(error)
-        })
-    }
+    personService
+      .remove(id)
+      .then(() => {
+        setPersons(
+          persons.filter(person => person.id !== id)
+        )
+
+        showMessage(`Deleted ${name}`)
+      })
+      .catch(error => {
+        showMessage(
+          error.response?.data?.error || 'Delete failed',
+          true
+        )
+      })
   }
 
   const handleNameChange = event => {
@@ -152,25 +207,33 @@ const App = () => {
     <div>
       <h2>Phonebook</h2>
 
-      <Filter
-        filter={filter}
-        handleFilterChange={handleFilterChange}
+      <Notification
+        message={message}
+        error={error}
       />
 
-      <h3>Add a new</h3>
+      <div>
+        filter shown with
+        <input
+          value={filter}
+          onChange={handleFilterChange}
+        />
+      </div>
+
+      <h2>add a new</h2>
 
       <PersonForm
         addPerson={addPerson}
         newName={newName}
-        handleNameChange={handleNameChange}
         newNumber={newNumber}
+        handleNameChange={handleNameChange}
         handleNumberChange={handleNumberChange}
       />
 
-      <h3>Numbers</h3>
+      <h2>Numbers</h2>
 
       <Persons
-        personsToShow={personsToShow}
+        persons={personsToShow}
         deletePerson={deletePerson}
       />
     </div>

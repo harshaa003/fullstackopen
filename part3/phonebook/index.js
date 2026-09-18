@@ -1,19 +1,33 @@
+require('dotenv').config()
+
 const express = require('express')
 const morgan = require('morgan')
 const cors = require('cors')
 const path = require('path')
+const mongoose = require('mongoose')
+const Person = require('./models/person')
 
 const app = express()
+
+const url = process.env.MONGODB_URI
+
+mongoose.connect(url, { family: 4 })
+  .then(() => {
+    console.log('connected to MongoDB')
+  })
+  .catch(error => {
+    console.log('error connecting to MongoDB:', error.message)
+  })
 
 app.use(cors())
 app.use(express.json())
 
-// 3.8 - Custom Morgan token for POST data
-morgan.token('body', (request) => {
+// Morgan token for request body
+morgan.token('body', request => {
   return JSON.stringify(request.body)
 })
 
-// 3.7 + 3.8 - Morgan logging
+// Morgan logging
 app.use(morgan((tokens, request, response) => {
   if (request.method === 'POST') {
     return [
@@ -39,103 +53,122 @@ app.use(morgan((tokens, request, response) => {
   ].join(' ')
 }))
 
-const persons = [
-  {
-    id: '1',
-    name: 'Arto Hellas',
-    number: '040-123456'
-  },
-  {
-    id: '2',
-    name: 'Ada Lovelace',
-    number: '39-44-5323523'
-  },
-  {
-    id: '3',
-    name: 'Dan Abramov',
-    number: '12-43-234345'
-  },
-  {
-    id: '4',
-    name: 'Mary Poppendieck',
-    number: '39-23-6423122'
-  }
-]
-
-// 3.1
-app.get('/api/persons', (request, response) => {
-  response.json(persons)
+// GET all persons
+app.get('/api/persons', (request, response, next) => {
+  Person.find({})
+    .then(persons => {
+      response.json(persons)
+    })
+    .catch(error => next(error))
 })
 
-// 3.2
-app.get('/info', (request, response) => {
+// GET information
+app.get('/info', (request, response, next) => {
   const currentTime = new Date()
 
-  response.send(`
-    <p>Phonebook has info for ${persons.length} people</p>
-    <p>${currentTime}</p>
-  `)
+  Person.countDocuments({})
+    .then(count => {
+      response.send(`
+        <p>Phonebook has info for ${count} people</p>
+        <p>${currentTime}</p>
+      `)
+    })
+    .catch(error => next(error))
 })
 
-// 3.3
-app.get('/api/persons/:id', (request, response) => {
-  const id = request.params.id
-  const person = persons.find(person => person.id === id)
-
-  if (person) {
-    response.json(person)
-  } else {
-    response.status(404).end()
-  }
+// GET one person
+app.get('/api/persons/:id', (request, response, next) => {
+  Person.findById(request.params.id)
+    .then(person => {
+      if (person) {
+        response.json(person)
+      } else {
+        response.status(404).end()
+      }
+    })
+    .catch(error => next(error))
 })
 
-// 3.4
-app.delete('/api/persons/:id', (request, response) => {
-  const id = request.params.id
-
-  const personIndex = persons.findIndex(person => person.id === id)
-
-  if (personIndex === -1) {
-    return response.status(404).end()
-  }
-
-  persons.splice(personIndex, 1)
-
-  response.status(204).end()
+// DELETE person
+app.delete('/api/persons/:id', (request, response, next) => {
+  Person.findByIdAndDelete(request.params.id)
+    .then(person => {
+      if (person) {
+        response.status(204).end()
+      } else {
+        response.status(404).end()
+      }
+    })
+    .catch(error => next(error))
 })
 
-// 3.5 + 3.6
-app.post('/api/persons', (request, response) => {
+// POST new person
+app.post('/api/persons', (request, response, next) => {
   const body = request.body
 
-  if (!body.name) {
+  if (!body.name || !body.number) {
     return response.status(400).json({
-      error: 'name missing'
+      error: 'name or number missing'
     })
   }
 
-  if (!body.number) {
-    return response.status(400).json({
-      error: 'number missing'
-    })
-  }
-
-  if (persons.some(person => person.name === body.name)) {
-    return response.status(400).json({
-      error: 'name must be unique'
-    })
-  }
-
-  const person = {
-    id: String(Math.floor(Math.random() * 1000000)),
+  const person = new Person({
     name: body.name,
     number: body.number
+  })
+
+  person.save()
+    .then(savedPerson => {
+      response.json(savedPerson)
+    })
+    .catch(error => next(error))
+})
+
+// PUT update person
+app.put('/api/persons/:id', (request, response, next) => {
+  const { name, number } = request.body
+
+  Person.findByIdAndUpdate(
+    request.params.id,
+    { name, number },
+    {
+      new: true,
+      runValidators: true,
+      context: 'query'
+    }
+  )
+    .then(updatedPerson => {
+      if (updatedPerson) {
+        response.json(updatedPerson)
+      } else {
+        response.status(404).end()
+      }
+    })
+    .catch(error => next(error))
+})
+
+// Error handler
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message)
+
+  if (error.name === 'CastError') {
+    return response.status(400).send({
+      error: 'malformatted id'
+    })
   }
 
-  persons.push(person)
+  if (error.name === 'ValidationError') {
+    return response.status(400).json({
+      error: error.message
+    })
+  }
 
-  response.json(person)
-})
+  next(error)
+}
+
+app.use(errorHandler)
+
+// Serve frontend
 app.use(express.static(path.join(__dirname, 'dist')))
 
 app.get('/{*splat}', (request, response) => {
